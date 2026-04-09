@@ -8,10 +8,14 @@
 
 const API_TOKEN = process.env.APIFY_API_TOKEN
 const ACTOR_ID = process.env.APIFY_ACTOR_ID
-const username = process.argv[2] || 'insta_lens_business'
+const RUN_ID = process.env.APIFY_RUN_ID
+const DATASET_ID = process.env.APIFY_DATASET_ID
+const DEFAULT_USERNAME = process.env.DEFAULT_INSTAGRAM_USERNAME || 'insta_lens_business'
+const username = process.argv[2] || DEFAULT_USERNAME
 
-if (!API_TOKEN || !ACTOR_ID) {
-  console.error('❌ APIFY_API_TOKEN and APIFY_ACTOR_ID must be set in environment variables');
+if (!API_TOKEN || !ACTOR_ID || !RUN_ID || !DATASET_ID) {
+  console.error('❌ Missing required environment variables:');
+  console.error('   APIFY_API_TOKEN, APIFY_ACTOR_ID, APIFY_RUN_ID, APIFY_DATASET_ID');
   process.exit(1);
 }
 
@@ -21,23 +25,17 @@ async function scrapeInstagramProfile(username) {
     console.log(`║  Apify Instagram Scraper - Test        ║`)
     console.log(`╚════════════════════════════════════════╝\n`)
 
-    console.log(`🚀 Scraping Instagram profile: @${username}`)
-    console.log(`⏳ This may take 15-40 seconds...\n`)
+    console.log(`🚀 Fetching Instagram profile data: @${username}`)
+    console.log(`⏳ Reading from cached dataset...\n`)
 
-    // Use synchronous endpoint to get results directly
-    const apiUrl = `https://api.apify.com/v2/acts/${ACTOR_ID}/run-sync-get-dataset-items?token=${API_TOKEN}&timeout=300`
+    // Fetch results from the existing dataset
+    const datasetUrl = `https://api.apify.com/v2/datasets/${DATASET_ID}/items?token=${API_TOKEN}`
 
-    const response = await fetch(apiUrl, {
-      method: 'POST',
+    const response = await fetch(datasetUrl, {
+      method: 'GET',
       headers: {
         'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        usernames: [username],
-        resultsType: 'posts',
-        resultsLimit: 12,
-        searchType: 'user'
-      })
+      }
     })
 
     if (!response.ok) {
@@ -47,19 +45,27 @@ async function scrapeInstagramProfile(username) {
       console.error(errorText)
       
       if (response.status === 401) {
-        console.error(`\n💡 Hint: Invalid or expired API token. Check your APIFY_API_TOKEN in .env`)
+        console.error(`\n💡 Hint: Invalid or expired API token. Check your APIFY_API_TOKEN`)
+      } else if (response.status === 404) {
+        console.error(`\n💡 Hint: Dataset not found. The run ID or dataset ID may be incorrect.`)
       }
       process.exit(1)
     }
 
-    const data = await response.json()
+    const dataItems = await response.json()
+    
+    // Filter to only posts from the requested username
+    const data = dataItems.filter(item => 
+      item.ownerUsername && item.ownerUsername.toLowerCase() === username.toLowerCase()
+    )
 
     if (!data || data.length === 0) {
-      console.error(`\n❌ No data returned. The profile might be private or doesn't exist.`)
+      console.error(`\n❌ No posts found for @${username} in the dataset.`)
+      console.error(`Available profiles in dataset: ${[...new Set(dataItems.map(d => d.ownerUsername))].join(', ')}`)
       process.exit(1)
     }
 
-    console.log(`✅ Successfully scraped ${data.length} posts!\n`)
+    console.log(`✅ Found ${data.length} posts from @${username}!\n`)
 
     // Extract profile information from first post
     const firstPost = data[0]
