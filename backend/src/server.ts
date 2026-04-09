@@ -11,6 +11,7 @@ import { errorResponse, successResponse } from './lib/validation/errors'
 
 import { createAuthRoutes } from './routes/auth'
 import { createProfileRoutes } from './routes/profile'
+import { createAIRoutes } from './routes/ai'
 
 // Validate environment variables
 const env = envSchema.parse(process.env)
@@ -57,6 +58,7 @@ app.get('/health', (req: Request, res: Response) => {
 // API Routes
 app.use('/api/auth', createAuthRoutes(instagramOAuth, tokenStore))
 app.use('/api/profile', createProfileRoutes())
+app.use('/api/ai', createAIRoutes())
 
 // 404 handler
 app.use((req: Request, res: Response) => {
@@ -90,7 +92,8 @@ app.listen(port, () => {
   console.log('  GET  /api/auth/instagram - Start OAuth flow')
   console.log('  GET  /api/auth/instagram/callback - OAuth callback handler')
   console.log('  POST /api/auth/revoke - Revoke access token')
-  console.log('  POST /api/profile/analyze - Analyze Instagram profile')
+  console.log('  POST /api/profile/analyze - Analyze Instagram profile (Apify scraper)')
+  console.log('  POST /api/ai/analyze - AI analysis with Mastra + Groq Llama 3.3 70B')
   console.log('  GET  /api/profile/me - Get authenticated user profile')
 })
 

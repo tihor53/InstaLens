@@ -5,16 +5,27 @@ import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import PixelDivider from '@/components/PixelDivider';
 
+type IntegrationTarget = 'google_sheets' | 'hubspot' | 'bigquery' | 'mailchimp' | 'salesforce';
+
 export default function SubmitPage() {
   const router = useRouter();
   const [instagramUrl, setInstagramUrl] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [selectedIntegrations, setSelectedIntegrations] = useState<IntegrationTarget[]>([]);
+  const [googleSheetsId, setGoogleSheetsId] = useState('');
+  const [hubspotListId, setHubspotListId] = useState('');
 
   const validateInstagramUrl = (url: string): boolean => {
     const instagramRegex =
       /^(https?:\/\/)?(www\.)?instagram\.com\/([a-zA-Z0-9_.-]+)\/?$/;
     return instagramRegex.test(url.trim());
+  };
+
+  const toggleIntegration = (target: IntegrationTarget) => {
+    setSelectedIntegrations((prev) =>
+      prev.includes(target) ? prev.filter((t) => t !== target) : [...prev, target]
+    );
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -42,10 +53,30 @@ export default function SubmitPage() {
       return;
     }
 
+    // Validate that if Google Sheets is selected, ID is provided
+    if (selectedIntegrations.includes('google_sheets') && !googleSheetsId.trim()) {
+      setError('Please provide your Google Sheets ID for Google Sheets integration');
+      return;
+    }
+
+    // Validate that if HubSpot is selected, list ID is provided
+    if (selectedIntegrations.includes('hubspot') && !hubspotListId.trim()) {
+      setError('Please provide your HubSpot List ID for HubSpot integration');
+      return;
+    }
+
     setLoading(true);
-    
-    // Navigate to extraction page with username as query parameter
-    router.push(`/extraction?username=${encodeURIComponent(username)}`);
+
+    // Build query string with integrations and credentials
+    const params = new URLSearchParams({
+      username: encodeURIComponent(username),
+      integrations: selectedIntegrations.join(','),
+      ...(selectedIntegrations.includes('google_sheets') && { googleSheetsId }),
+      ...(selectedIntegrations.includes('hubspot') && { hubspotListId }),
+    });
+
+    // Navigate to extraction page with all parameters
+    router.push(`/extraction?${params.toString()}`);
   };
 
   return (
@@ -108,6 +139,123 @@ export default function SubmitPage() {
                 </p>
               </div>
             )}
+
+            {/* Integration Selection */}
+            <div className="pt-4 border-t-2 border-[#2D2D2D]">
+              <label className="font-ibm-mono text-[11px] text-[#FFD600] tracking-[2px] block mb-4">
+                EXPORT TO (OPTIONAL)
+              </label>
+              
+              <div className="space-y-3">
+                {/* Google Sheets */}
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedIntegrations.includes('google_sheets')}
+                    onChange={() => toggleIntegration('google_sheets')}
+                    className="mt-1 w-4 h-4 cursor-pointer"
+                  />
+                  <div className="flex-1">
+                    <p className="font-ibm-mono text-[12px] font-bold text-[#F5F5F0]">
+                      Google Sheets
+                    </p>
+                    <p className="font-ibm-mono text-[11px] text-[#888888] tracking-[0.5px]">
+                      Export analytics to your Google Sheet
+                    </p>
+                  </div>
+                </label>
+                {selectedIntegrations.includes('google_sheets') && (
+                  <input
+                    type="text"
+                    placeholder="Google Sheets ID (from URL)"
+                    value={googleSheetsId}
+                    onChange={(e) => setGoogleSheetsId(e.target.value)}
+                    className="ml-7 w-full px-4 py-3 bg-[#1A1A1A] border-2 border-[#2D2D2D] text-[#F5F5F0] placeholder-[#666666] font-ibm-mono text-[12px] focus:outline-none focus:border-[#FFD600] transition-colors"
+                  />
+                )}
+
+                {/* HubSpot */}
+                <label className="flex items-start gap-3 cursor-pointer pt-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedIntegrations.includes('hubspot')}
+                    onChange={() => toggleIntegration('hubspot')}
+                    className="mt-1 w-4 h-4 cursor-pointer"
+                  />
+                  <div className="flex-1">
+                    <p className="font-ibm-mono text-[12px] font-bold text-[#F5F5F0]">
+                      HubSpot
+                    </p>
+                    <p className="font-ibm-mono text-[11px] text-[#888888] tracking-[0.5px]">
+                      Create contact in your HubSpot CRM
+                    </p>
+                  </div>
+                </label>
+                {selectedIntegrations.includes('hubspot') && (
+                  <input
+                    type="text"
+                    placeholder="HubSpot List ID"
+                    value={hubspotListId}
+                    onChange={(e) => setHubspotListId(e.target.value)}
+                    className="ml-7 w-full px-4 py-3 bg-[#1A1A1A] border-2 border-[#2D2D2D] text-[#F5F5F0] placeholder-[#666666] font-ibm-mono text-[12px] focus:outline-none focus:border-[#FFD600] transition-colors"
+                  />
+                )}
+
+                {/* BigQuery */}
+                <label className="flex items-start gap-3 cursor-pointer pt-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedIntegrations.includes('bigquery')}
+                    onChange={() => toggleIntegration('bigquery')}
+                    className="mt-1 w-4 h-4 cursor-pointer"
+                  />
+                  <div className="flex-1">
+                    <p className="font-ibm-mono text-[12px] font-bold text-[#F5F5F0]">
+                      BigQuery
+                    </p>
+                    <p className="font-ibm-mono text-[11px] text-[#888888] tracking-[0.5px]">
+                      Store in BigQuery warehouse
+                    </p>
+                  </div>
+                </label>
+
+                {/* Mailchimp */}
+                <label className="flex items-start gap-3 cursor-pointer pt-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedIntegrations.includes('mailchimp')}
+                    onChange={() => toggleIntegration('mailchimp')}
+                    className="mt-1 w-4 h-4 cursor-pointer"
+                  />
+                  <div className="flex-1">
+                    <p className="font-ibm-mono text-[12px] font-bold text-[#F5F5F0]">
+                      Mailchimp
+                    </p>
+                    <p className="font-ibm-mono text-[11px] text-[#888888] tracking-[0.5px]">
+                      Add to Mailchimp audience
+                    </p>
+                  </div>
+                </label>
+
+                {/* Salesforce */}
+                <label className="flex items-start gap-3 cursor-pointer pt-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedIntegrations.includes('salesforce')}
+                    onChange={() => toggleIntegration('salesforce')}
+                    className="mt-1 w-4 h-4 cursor-pointer"
+                  />
+                  <div className="flex-1">
+                    <p className="font-ibm-mono text-[12px] font-bold text-[#F5F5F0]">
+                      Salesforce
+                    </p>
+                    <p className="font-ibm-mono text-[11px] text-[#888888] tracking-[0.5px]">
+                      Sync to Salesforce
+                    </p>
+                  </div>
+                </label>
+              </div>
+            </div>
 
             {/* Submit Button */}
             <button

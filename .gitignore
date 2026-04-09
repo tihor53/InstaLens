@@ -1,0 +1,7 @@
+# DuckDB files
+*.duckdb
+*.duckdb-shm
+*.duckdb-wal
+mastra.db
+mastra.db-shm
+mastra.db-wal

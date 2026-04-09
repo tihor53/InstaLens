@@ -44,14 +44,35 @@ interface ProfileData {
   };
 }
 
+interface AnalysisResult {
+  profileAnalysis?: any;
+  contentAnalysis?: any;
+  audienceInsights?: any;
+  structuredData?: any;
+}
+
+interface IntegrationResult {
+  target: string;
+  status: 'fulfilled' | 'rejected';
+  data?: any;
+  error?: string;
+}
+
 export default function ExtractionPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const instagramHandle = searchParams.get('username') || searchParams.get('handle');
+  const integrationsParam = searchParams.get('integrations');
+  const googleSheetsId = searchParams.get('googleSheetsId');
+  const hubspotListId = searchParams.get('hubspotListId');
 
   const [loading, setLoading] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [pushing, setPushing] = useState(false);
   const [error, setError] = useState('');
   const [data, setData] = useState<ProfileData | null>(null);
+  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+  const [integrationResults, setIntegrationResults] = useState<IntegrationResult[]>([]);
 
   useEffect(() => {
     if (instagramHandle) {
@@ -66,8 +87,8 @@ export default function ExtractionPage() {
       setLoading(true);
       setError('');
 
-      // Call backend API to analyze the profile using Apify
-      const response = await fetch('http://localhost:5001/api/profile/analyze', {
+      // Step 1: Fetch raw profile data from backend
+      const profileResponse = await fetch('/api/profile/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -75,16 +96,19 @@ export default function ExtractionPage() {
         body: JSON.stringify({ username }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
+      if (!profileResponse.ok) {
+        const errorData = await profileResponse.json();
         throw new Error(errorData.error?.message || 'Failed to analyze profile');
       }
 
-      const result = await response.json();
-      if (result.success && result.data) {
-        setData(result.data);
+      const profileResult = await profileResponse.json();
+      if (profileResult.success && profileResult.data) {
+        setData(profileResult.data);
+
+        // Step 2: Run AI analysis on the profile data
+        await runAIAnalysis(profileResult.data, username);
       } else {
-        setError(result.error?.message || 'Failed to fetch profile data');
+        setError(profileResult.error?.message || 'Failed to fetch profile data');
       }
     } catch (err: any) {
       setError(err.message || 'Failed to analyze profile. Please try again.');
@@ -94,7 +118,188 @@ export default function ExtractionPage() {
     }
   };
 
-  if (loading) {
+  const runAIAnalysis = async (profileData: any, username: string) => {
+    try {
+      setAnalyzing(true);
+      console.log('🤖 Starting AI analysis for:', username);
+
+      // Run AI agents on the profile data
+      const analysisResponse = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          profileData: {
+            username: profileData.profile.username,
+            fullName: profileData.profile.name,
+            biography: profileData.profile.biography,
+            followerCount: profileData.profile.followers,
+            followingCount: profileData.profile.following,
+            postCount: profileData.profile.postsCount,
+            isBusinessAccount: !!profileData.profile.verified,
+            category: profileData.profile.category || '',
+            posts: profileData.posts,
+          },
+        }),
+      });
+
+      if (!analysisResponse.ok) {
+        const errorData = await analysisResponse.json();
+        console.error('❌ AI analysis failed:', errorData);
+        // Don't fail the whole page if AI fails - just skip integration push
+        setAnalysis(null);
+        console.warn('⚠️ Skipping AI-powered insights. Proceeding with basic profile data.');
+        return;
+      }
+
+      const analysisResult = await analysisResponse.json();
+      console.log('✅ AI analysis complete:', analysisResult);
+      console.log('⚠️ Analysis warnings:', analysisResult.warning);
+      
+      if (analysisResult.success && analysisResult.data) {
+        setAnalysis(analysisResult.data);
+        
+        // Log whether we have AI-generated data or fallback data
+        if (analysisResult.warning) {
+          console.warn('⚠️ Warning from API:', analysisResult.warning);
+          if (!analysisResult.data.structuredData) {
+            console.log('✅ Using fallback structured data (no AI fields available)');
+          } else {
+            console.log('📊 Structured data prepared:', analysisResult.data.structuredData);
+          }
+        } else {
+          console.log('📊 Structured data prepared:', analysisResult.data.structuredData);
+        }
+
+        // Step 3: Push to integrations if selected
+        if (integrationsParam) {
+          console.log('🔗 Pushing to integrations:', integrationsParam);
+          await pushToIntegrations(
+            analysisResult.data.structuredData,
+            integrationsParam
+          );
+        } else {
+          console.log('ℹ️ No integrations selected');
+        }
+      }
+    } catch (err: any) {
+      console.error('❌ AI analysis error:', err);
+      // Don't block the page if AI analysis fails
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const pushToIntegrations = async (
+    structuredData: any,
+    integrationsStr: string
+  ) => {
+    try {
+      setPushing(true);
+      console.log('🔗 Starting integration push for:', integrationsStr);
+
+      const targets = integrationsStr.split(',').filter(Boolean);
+      const credentials: Record<string, any> = {};
+
+      console.log('📋 Selected targets:', targets);
+
+      // Build credentials object based on selected integrations
+      if (targets.includes('google_sheets')) {
+        if (!googleSheetsId) {
+          console.warn('⚠️ Google Sheets selected but no ID provided');
+        } else {
+          credentials.google_sheets = {
+            spreadsheetId: googleSheetsId,
+            sheetName: 'Instagram Leads'
+          };
+          console.log('✅ Google Sheets credentials set:', { spreadsheetId: googleSheetsId });
+        }
+      }
+
+      if (targets.includes('hubspot')) {
+        if (!hubspotListId) {
+          console.warn('⚠️ HubSpot selected but no List ID provided');
+        } else {
+          credentials.hubspot = {
+            listId: hubspotListId,
+          };
+          console.log('✅ HubSpot credentials set:', { listId: hubspotListId });
+        }
+      }
+
+      // For other integrations, use environment variable defaults
+      if (targets.includes('bigquery')) {
+        credentials.bigquery = {
+          projectId: process.env.NEXT_PUBLIC_BIGQUERY_PROJECT_ID,
+          datasetId: process.env.NEXT_PUBLIC_BIGQUERY_DATASET_ID,
+        };
+        console.log('ℹ️ BigQuery config set from env vars');
+      }
+
+      if (targets.includes('mailchimp')) {
+        credentials.mailchimp = {
+          listId: process.env.NEXT_PUBLIC_MAILCHIMP_LIST_ID,
+        };
+        console.log('ℹ️ Mailchimp config set from env vars');
+      }
+
+      if (targets.includes('salesforce')) {
+        credentials.salesforce = {
+          instanceUrl: process.env.NEXT_PUBLIC_SALESFORCE_INSTANCE_URL,
+        };
+        console.log('ℹ️ Salesforce config set from env vars');
+      }
+
+      console.log('📤 Calling /api/integrations/push with credentials keys:', Object.keys(credentials));
+
+      const pushResponse = await fetch('/api/integrations/push', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          structuredData,
+          integrationTargets: targets,
+          credentials,
+        }),
+      });
+
+      const responseData = await pushResponse.json();
+      console.log('📥 Push response status:', pushResponse.status);
+      console.log('📥 Push response data:', responseData);
+
+      if (!pushResponse.ok) {
+        console.error('❌ Integration push failed (HTTP ' + pushResponse.status + '):', responseData);
+        setIntegrationResults([
+          {
+            target: 'error',
+            status: 'rejected',
+            error: responseData.error?.message || `HTTP ${pushResponse.status}: ${responseData.error?.invalidTargets?.join(', ') || 'Unknown error'}`,
+          },
+        ]);
+        return;
+      }
+
+      if (responseData.success && responseData.data.results) {
+        console.log('✅ Integration push succeeded:', responseData.data.results);
+        setIntegrationResults(responseData.data.results);
+      }
+    } catch (err: any) {
+      console.error('❌ Integration push error:', err);
+      setIntegrationResults([
+        {
+          target: 'error',
+          status: 'rejected',
+          error: err.message || 'Failed to push to integrations',
+        },
+      ]);
+    } finally {
+      setPushing(false);
+    }
+  };
+
+  if (loading || analyzing || pushing) {
     return (
       <main className="flex flex-col w-full min-h-screen bg-[#0A0A0A] pt-[60px]">
         <Navbar />
@@ -117,7 +322,11 @@ export default function ExtractionPage() {
               />
             </svg>
             <p className="font-grotesk text-[18px] font-bold text-[#F5F5F0] mt-6">
-              ANALYZING PROFILE...
+              {loading
+                ? 'EXTRACTING PROFILE...'
+                : analyzing
+                ? 'RUNNING AI ANALYSIS...'
+                : 'PUSHING TO INTEGRATIONS...'}
             </p>
             <p className="font-ibm-mono text-[12px] text-[#888888] mt-2 tracking-[1px]">
               THIS MAY TAKE A FEW MOMENTS
@@ -276,6 +485,264 @@ export default function ExtractionPage() {
                 ))}
               </div>
             </div>
+          )}
+
+          {/* AI Analysis Results */}
+          {analysis && (
+            <>
+              <div className="h-12" />
+
+              {/* Business Identity Section */}
+              {analysis.profileAnalysis && (
+                <div className="mb-8">
+                  <h2 className="font-grotesk text-[24px] font-bold text-[#F5F5F0] tracking-[-0.5px] mb-6">
+                    🏢 BUSINESS INTELLIGENCE
+                  </h2>
+
+                  {/* Business Classification */}
+                  {analysis.profileAnalysis.classification && (
+                    <div className="bg-[#0F0F0F] p-6 md:p-8 mb-6" style={{ border: '2px solid #2D2D2D' }}>
+                      <h3 className="font-grotesk text-[16px] font-bold text-[#FFD600] mb-4">
+                        CLASSIFICATION
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {analysis.profileAnalysis.classification.primaryCategory && (
+                          <div>
+                            <p className="font-ibm-mono text-[11px] text-[#888888] tracking-[1px] mb-2">
+                              PRIMARY CATEGORY
+                            </p>
+                            <p className="font-grotesk text-[14px] font-bold text-[#F5F5F0]">
+                              {analysis.profileAnalysis.classification.primaryCategory}
+                            </p>
+                          </div>
+                        )}
+                        {analysis.profileAnalysis.classification.businessModel && (
+                          <div>
+                            <p className="font-ibm-mono text-[11px] text-[#888888] tracking-[1px] mb-2">
+                              BUSINESS MODEL
+                            </p>
+                            <p className="font-grotesk text-[14px] font-bold text-[#F5F5F0]">
+                              {analysis.profileAnalysis.classification.businessModel}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      {analysis.profileAnalysis.classification.subCategories &&
+                        analysis.profileAnalysis.classification.subCategories.length > 0 && (
+                          <div className="mt-4 pt-4 border-t border-[#2D2D2D]">
+                            <p className="font-ibm-mono text-[11px] text-[#888888] tracking-[1px] mb-3">
+                              SUB-CATEGORIES
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {analysis.profileAnalysis.classification.subCategories.map(
+                                (cat: string, idx: number) => (
+                                  <span
+                                    key={idx}
+                                    className="px-3 py-1 bg-[#1A1A1A] border border-[#FFD600]/30 text-[#F5F5F0] font-ibm-mono text-[11px] rounded"
+                                  >
+                                    {cat}
+                                  </span>
+                                )
+                              )}
+                            </div>
+                          </div>
+                        )}
+                    </div>
+                  )}
+
+                  {/* Business Identity */}
+                  {analysis.profileAnalysis.businessIdentity && (
+                    <div className="bg-[#0F0F0F] p-6 md:p-8 mb-6" style={{ border: '2px solid #2D2D2D' }}>
+                      <h3 className="font-grotesk text-[16px] font-bold text-[#FFD600] mb-4">
+                        BUSINESS IDENTITY
+                      </h3>
+                      {analysis.profileAnalysis.businessIdentity.description && (
+                        <p className="font-ibm-mono text-[12px] text-[#888888] leading-relaxed mb-4">
+                          {analysis.profileAnalysis.businessIdentity.description}
+                        </p>
+                      )}
+                      {analysis.profileAnalysis.businessIdentity.tagline && (
+                        <div className="p-3 bg-[#1A1A1A] border-l-4 border-[#FFD600]">
+                          <p className="font-grotesk text-[13px] font-bold text-[#F5F5F0] italic">
+                            "{analysis.profileAnalysis.businessIdentity.tagline}"
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Content & Services Section */}
+              {analysis.contentAnalysis && (
+                <div className="mb-8">
+                  <h2 className="font-grotesk text-[24px] font-bold text-[#F5F5F0] tracking-[-0.5px] mb-6">
+                    📱 CONTENT ANALYSIS
+                  </h2>
+
+                  {/* Services */}
+                  {analysis.contentAnalysis.services &&
+                    analysis.contentAnalysis.services.length > 0 && (
+                      <div className="bg-[#0F0F0F] p-6 md:p-8 mb-6" style={{ border: '2px solid #2D2D2D' }}>
+                        <h3 className="font-grotesk text-[16px] font-bold text-[#FFD600] mb-4">
+                          SERVICES OFFERED
+                        </h3>
+                        <div className="space-y-4">
+                          {analysis.contentAnalysis.services.map((service: any, idx: number) => (
+                            <div key={idx} className="p-3 bg-[#1A1A1A] border border-[#2D2D2D]">
+                              <p className="font-grotesk text-[12px] font-bold text-[#FFD600] mb-1">
+                                {service.name}
+                              </p>
+                              <p className="font-ibm-mono text-[11px] text-[#888888]">
+                                {service.description}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                  {/* Content Themes */}
+                  {analysis.contentAnalysis.contentThemes &&
+                    analysis.contentAnalysis.contentThemes.length > 0 && (
+                      <div className="bg-[#0F0F0F] p-6 md:p-8" style={{ border: '2px solid #2D2D2D' }}>
+                        <h3 className="font-grotesk text-[16px] font-bold text-[#FFD600] mb-4">
+                          CONTENT THEMES
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {analysis.contentAnalysis.contentThemes.map((theme: any, idx: number) => (
+                            <div key={idx} className="p-3 bg-[#1A1A1A]">
+                              <p className="font-grotesk text-[12px] font-bold text-[#FFD600]">
+                                {theme.theme}
+                              </p>
+                              <p className="font-ibm-mono text-[10px] text-[#888888] mt-1 capitalize">
+                                Frequency: {theme.frequency}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                </div>
+              )}
+
+              {/* Audience Insights Section */}
+              {analysis.audienceInsights && (
+                <div className="mb-8">
+                  <h2 className="font-grotesk text-[24px] font-bold text-[#F5F5F0] tracking-[-0.5px] mb-6">
+                    👥 AUDIENCE INSIGHTS
+                  </h2>
+
+                  {/* Target Audience */}
+                  {analysis.audienceInsights.targetAudience && (
+                    <div className="bg-[#0F0F0F] p-6 md:p-8 mb-6" style={{ border: '2px solid #2D2D2D' }}>
+                      <h3 className="font-grotesk text-[16px] font-bold text-[#FFD600] mb-4">
+                        TARGET AUDIENCE
+                      </h3>
+                      {analysis.audienceInsights.targetAudience.demographics && (
+                        <div className="mb-4">
+                          <p className="font-ibm-mono text-[11px] text-[#888888] tracking-[1px] mb-2">
+                            DEMOGRAPHICS
+                          </p>
+                          <p className="font-grotesk text-[13px] text-[#F5F5F0] mb-2">
+                            {analysis.audienceInsights.targetAudience.demographics.ageRange}
+                          </p>
+                          {analysis.audienceInsights.targetAudience.demographics.interests && (
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {analysis.audienceInsights.targetAudience.demographics.interests.map(
+                                (interest: string, idx: number) => (
+                                  <span
+                                    key={idx}
+                                    className="px-2 py-1 bg-[#1A1A1A] border border-[#FFD600]/20 text-[#F5F5F0] font-ibm-mono text-[10px]"
+                                  >
+                                    {interest}
+                                  </span>
+                                )
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Engagement Patterns */}
+                  {analysis.audienceInsights.engagementPatterns && (
+                    <div className="bg-[#0F0F0F] p-6 md:p-8" style={{ border: '2px solid #2D2D2D' }}>
+                      <h3 className="font-grotesk text-[16px] font-bold text-[#FFD600] mb-4">
+                        ENGAGEMENT PATTERNS
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {analysis.audienceInsights.engagementPatterns.postingFrequency && (
+                          <div>
+                            <p className="font-ibm-mono text-[11px] text-[#888888] tracking-[1px] mb-2">
+                              POSTING FREQUENCY
+                            </p>
+                            <p className="font-grotesk text-[14px] font-bold text-[#FFD600]">
+                              {analysis.audienceInsights.engagementPatterns.postingFrequency}
+                            </p>
+                          </div>
+                        )}
+                        {analysis.audienceInsights.engagementPatterns.averageEngagementRate && (
+                          <div>
+                            <p className="font-ibm-mono text-[11px] text-[#888888] tracking-[1px] mb-2">
+                              AVG ENGAGEMENT RATE
+                            </p>
+                            <p className="font-grotesk text-[14px] font-bold text-[#FFD600]">
+                              {analysis.audienceInsights.engagementPatterns.averageEngagementRate}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Integration Status Section */}
+              {integrationResults.length > 0 && (
+                <div className="mb-8">
+                  <h2 className="font-grotesk text-[24px] font-bold text-[#F5F5F0] tracking-[-0.5px] mb-6">
+                    🔗 INTEGRATION STATUS
+                  </h2>
+
+                  <div className="space-y-4">
+                    {integrationResults.map((result, idx) => (
+                      <div
+                        key={idx}
+                        className={`p-4 border-l-4 ${
+                          result.status === 'fulfilled'
+                            ? 'bg-[#1A3D1A] border-[#4ade80]'
+                            : 'bg-[#3D1A1A] border-[#FF6B6B]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <span className={result.status === 'fulfilled' ? 'text-[#4ade80]' : 'text-[#FF6B6B]'}>
+                              {result.status === 'fulfilled' ? '✓' : '✕'}
+                            </span>
+                            <div>
+                              <p className="font-grotesk text-[13px] font-bold text-[#F5F5F0] capitalize">
+                                {result.target}
+                              </p>
+                              {result.status === 'fulfilled' ? (
+                                <p className="font-ibm-mono text-[11px] text-[#4ade80]">
+                                  Successfully synced
+                                </p>
+                              ) : (
+                                <p className="font-ibm-mono text-[11px] text-[#FF6B6B]">
+                                  {result.error || 'Failed'}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           <div className="h-12" />
