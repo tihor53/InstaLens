@@ -8,9 +8,11 @@ export function createProfileRoutes(): Router {
   // Initialize Apify client
   const apifyApiToken = process.env.APIFY_API_TOKEN
   const apifyActorId = process.env.APIFY_ACTOR_ID
+  const apifyDatasetId = process.env.APIFY_DATASET_ID
 
-  if (!apifyApiToken || !apifyActorId) {
+  if (!apifyApiToken || !apifyActorId || !apifyDatasetId) {
     console.error('❌ Apify credentials not configured in .env')
+    console.error('   Required: APIFY_API_TOKEN, APIFY_ACTOR_ID, APIFY_DATASET_ID')
   }
 
   /**
@@ -27,7 +29,7 @@ export function createProfileRoutes(): Router {
         )
       }
 
-      if (!apifyApiToken || !apifyActorId) {
+      if (!apifyApiToken || !apifyActorId || !apifyDatasetId) {
         return res.status(500).json(
           errorResponse(500, 'Apify credentials not configured', 'APIFY_NOT_CONFIGURED')
         )
@@ -35,10 +37,11 @@ export function createProfileRoutes(): Router {
 
       console.log(`📸 Analyzing Instagram profile: @${username}`)
 
-      // Initialize Apify client with proper API token
+      // Initialize Apify client with proper API token and dataset ID
       const apifyClient = new ApifyInstagramClient({
         apiToken: apifyApiToken,
-        actorId: apifyActorId
+        actorId: apifyActorId,
+        datasetId: apifyDatasetId
       })
 
       // Scrape the Instagram profile

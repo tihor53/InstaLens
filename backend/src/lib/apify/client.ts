@@ -35,115 +35,67 @@ interface InstagramPostData {
 interface ApifyConfig {
   apiToken: string
   actorId: string
+  datasetId?: string
 }
 
 export class ApifyInstagramClient {
   private apiToken: string
   private actorId: string
+  private datasetId?: string
   private apiBaseUrl = 'https://api.apify.com/v2'
 
   constructor(config: ApifyConfig) {
     this.apiToken = config.apiToken
     this.actorId = config.actorId
+    this.datasetId = config.datasetId
   }
 
   /**
-   * Run Instagram scraper using async approach:
-   * 1. Start actor run
-   * 2. Wait for completion
-   * 3. Fetch dataset
+   * Fetch Instagram profile data from cached dataset
+   * Uses the apify-test.js approach
    */
   async scrapeAndWait(username: string, limit: number = 12): Promise<InstagramPostData[]> {
     try {
       console.log(`🚀 Starting Apify scrape for @${username}...`)
 
-      // URL encode the actor ID
-      const encodedActorId = encodeURIComponent(this.actorId)
+      if (!this.datasetId) {
+        throw new Error('Dataset ID not configured. Cannot fetch cached data.')
+      }
 
-      // Step 1: Start the run
-      console.log(`📡 Starting actor run...`)
-      const startUrl = `${this.apiBaseUrl}/acts/${encodedActorId}/runs?token=${this.apiToken}`
+      // Fetch all items from the dataset
+      const datasetUrl = `${this.apiBaseUrl}/datasets/${this.datasetId}/items?token=${this.apiToken}`
 
-      const startResponse = await fetch(startUrl, {
-        method: 'POST',
+      console.log(`📡 Fetching from dataset: ${this.datasetId}`)
+
+      const response = await fetch(datasetUrl, {
+        method: 'GET',
         headers: {
           'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          usernames: [username],
-          resultsType: 'posts',
-          resultsLimit: limit,
-          searchType: 'user'
-        })
+        }
       })
 
-      if (startResponse.status !== 201) {
-        const errorData = await startResponse.text()
-        throw new Error(`Failed to start actor run: ${startResponse.status} - ${errorData}`)
+      if (!response.ok) {
+        const errorData = await response.text()
+        throw new Error(`Apify API error (${response.status}): ${errorData}`)
       }
 
-      const startData = await startResponse.json()
-      const runId = startData?.data?.id
+      const allItems = await response.json() as InstagramPostData[]
 
-      if (!runId) {
-        throw new Error('No run ID returned from Apify')
+      if (!allItems || allItems.length === 0) {
+        throw new Error('No data returned from Apify dataset')
       }
 
-      console.log(`✅ Run started: ${runId}`)
+      // Filter to only posts from the requested username
+      const posts = allItems.filter(
+        (item: any) => item.ownerUsername && item.ownerUsername.toLowerCase() === username.toLowerCase()
+      )
 
-      // Step 2: Poll for completion (max 60 attempts = 60 seconds)
-      console.log(`⏳ Waiting for run to complete...`)
-      let runStatus = 'RUNNING'
-      let pollAttempts = 0
-      const maxAttempts = 60
-
-      while (runStatus === 'RUNNING' && pollAttempts < maxAttempts) {
-        pollAttempts++
-
-        const statusUrl = `${this.apiBaseUrl}/actor-runs/${runId}?token=${this.apiToken}`
-        const statusResponse = await fetch(statusUrl)
-        const statusData = await statusResponse.json()
-        runStatus = statusData?.data?.status
-
-        if (runStatus !== 'RUNNING') {
-          break
-        }
-
-        // Wait 1 second before next check
-        await new Promise(resolve => setTimeout(resolve, 1000))
+      if (posts.length === 0) {
+        throw new Error(`No posts found for @${username} in the dataset`)
       }
 
-      console.log(`📊 Run completed with status: ${runStatus}`)
-
-      if (runStatus !== 'SUCCEEDED') {
-        throw new Error(`Actor run failed with status: ${runStatus}`)
-      }
-
-      // Step 3: Fetch the dataset
-      console.log(`📥 Fetching dataset...`)
-      const datasetUrl = `${this.apiBaseUrl}/actor-runs/${runId}/dataset/items?token=${this.apiToken}&clean=true`
-      const datasetResponse = await fetch(datasetUrl)
-      const items = await datasetResponse.json()
-
-      if (!Array.isArray(items) || items.length === 0) {
-        throw new Error('No items returned from dataset')
-      }
-
-      // Check for error response
-      if (items[0]?.error) {
-        const errorMsg = items[0].errorDescription || items[0].error
-        throw new Error(`Apify actor returned error: ${errorMsg}`)
-      }
-
-      // Filter out any error items
-      const validItems = items.filter((item: any) => !item.error)
-
-      if (validItems.length === 0) {
-        throw new Error('All items returned were errors or invalid')
-      }
-
-      console.log(`✅ Got ${validItems.length} posts from Apify!`)
-      return validItems as InstagramPostData[]
+      console.log(`✅ Got ${posts.length} posts from Apify!`)
+      return posts as InstagramPostData[]
     } catch (error: any) {
       console.error('❌ Scrape failed:', error.message)
       throw error

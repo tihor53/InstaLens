@@ -103,12 +103,6 @@ export default function Navbar() {
           >
             LOG IN
           </button>
-          <a
-            href="#"
-            className="font-grotesk text-[11px] font-bold text-[#0A0A0A] bg-[#FFD600] tracking-[1.5px] px-[18px] py-[9px] hover:bg-[#F5F5F0] transition-colors"
-          >
-            START FREE
-          </a>
         </div>
 
         {/* ── Mobile burger ── */}

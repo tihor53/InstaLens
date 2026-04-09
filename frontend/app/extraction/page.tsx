@@ -67,7 +67,7 @@ export default function ExtractionPage() {
       setError('');
 
       // Call backend API to analyze the profile using Apify
-      const response = await fetch('http://localhost:5000/api/profile/analyze', {
+      const response = await fetch('http://localhost:5001/api/profile/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
