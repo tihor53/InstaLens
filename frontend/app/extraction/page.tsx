@@ -123,6 +123,20 @@ export default function ExtractionPage() {
       setAnalyzing(true);
       console.log('🤖 Starting AI analysis for:', username);
 
+      // Limit posts sent to backend to reduce payload size
+      // Mastra agents need representative samples, not all posts
+      const maxPosts = 20
+      const limitedPosts = (profileData.posts || []).slice(0, maxPosts).map((post: any) => ({
+        caption: post.caption ? post.caption.substring(0, 500) : '', // Limit caption length
+        hashtags: post.hashtags ? post.hashtags.slice(0, 10) : [], // Limit hashtags
+        mentions: post.mentions ? post.mentions.slice(0, 5) : [], // Limit mentions
+        likes: post.likes || 0,
+        comments: post.comments || 0,
+        timestamp: post.timestamp,
+      }))
+
+      console.log(`📊 Sending ${limitedPosts.length} sample posts to backend (limited from ${profileData.posts?.length || 0})`)
+
       // Run AI agents on the profile data
       const analysisResponse = await fetch('/api/analyze', {
         method: 'POST',
@@ -139,7 +153,7 @@ export default function ExtractionPage() {
             postCount: profileData.profile.postsCount,
             isBusinessAccount: !!profileData.profile.verified,
             category: profileData.profile.category || '',
-            posts: profileData.posts,
+            posts: limitedPosts, // Send limited/optimized posts
           },
         }),
       });
@@ -166,17 +180,18 @@ export default function ExtractionPage() {
           if (!analysisResult.data.structuredData) {
             console.log('✅ Using fallback structured data (no AI fields available)');
           } else {
-            console.log('📊 Structured data prepared:', analysisResult.data.structuredData);
+            console.log('📊 Analysis data prepared');
           }
         } else {
-          console.log('📊 Structured data prepared:', analysisResult.data.structuredData);
+          console.log('📊 Full AI analysis complete');
         }
 
         // Step 3: Push to integrations if selected
         if (integrationsParam) {
           console.log('🔗 Pushing to integrations:', integrationsParam);
+          // Pass the COMPLETE analysis data (including profileAnalysis, contentAnalysis, audienceInsights)
           await pushToIntegrations(
-            analysisResult.data.structuredData,
+            analysisResult.data,  // Changed from structuredData to full analysis data
             integrationsParam
           );
         } else {
@@ -192,9 +207,15 @@ export default function ExtractionPage() {
   };
 
   const pushToIntegrations = async (
-    structuredData: any,
+    analysisData: any,  // Changed from structuredData to analysisData
     integrationsStr: string
   ) => {
+    // Guard against duplicate pushes
+    if (pushing) {
+      console.log('⚠️ Integration push already in progress, skipping duplicate');
+      return;
+    }
+
     try {
       setPushing(true);
       console.log('🔗 Starting integration push for:', integrationsStr);
@@ -259,7 +280,7 @@ export default function ExtractionPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          structuredData,
+          analysisData,  // Changed from structuredData to analysisData
           integrationTargets: targets,
           credentials,
         }),

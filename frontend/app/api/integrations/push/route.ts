@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { IntegrationManager, IntegrationTarget } from '@/lib/integrations/manager'
 
 interface PushRequest {
-  structuredData: any
+  analysisData: any
   integrationTargets: IntegrationTarget[]
   credentials: Record<string, any>
 }
@@ -11,9 +11,9 @@ export async function POST(request: NextRequest) {
   try {
     const body: PushRequest = await request.json()
 
-    if (!body.structuredData) {
+    if (!body.analysisData) {
       return NextResponse.json(
-        { error: 'Structured data is required' },
+        { error: 'Analysis data is required' },
         { status: 400 }
       )
     }
@@ -61,9 +61,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Push to all integrations
+    // Push to all integrations with the complete analysis data
     const results = await manager.pushToIntegrations(
-      body.structuredData,
+      body.analysisData,
       body.integrationTargets,
       body.credentials
     )

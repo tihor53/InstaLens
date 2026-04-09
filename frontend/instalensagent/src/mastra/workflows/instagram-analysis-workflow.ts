@@ -48,6 +48,8 @@ const analyzeProfile = createStep({
       throw new Error('Profile data not found');
     }
 
+    console.log('🔍 [Step 1] Starting profile analysis for:', inputData.username);
+
     const profileContext = `
 Profile Username: ${inputData.username}
 Full Name: ${inputData.fullName}
@@ -62,23 +64,34 @@ Contact Email: ${inputData.contactInfo?.email || 'N/A'}
 Contact Phone: ${inputData.contactInfo?.phone || 'N/A'}
     `.trim();
 
-    const response = await profileAnalyzerAgent.generate(
-      `Analyze this Instagram business profile and extract business identity information:
+    try {
+      console.log('🤖 [Step 1] Calling profileAnalyzerAgent.generate...');
+      const agentPromise = profileAnalyzerAgent.generate(
+        `Analyze this Instagram business profile and extract business identity information:
 
 ${profileContext}
 
 Return a JSON object with businessIdentity, classification, branding, and location fields.`
-    );
+      );
 
-    try {
+      // Add 15-second timeout for agent call
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Profile analyzer agent timeout (15s)')), 15000)
+      );
+
+      const response = await Promise.race([agentPromise, timeoutPromise]);
+      console.log('✅ [Step 1] Agent response received');
+
       const text = response.text || response.content || response;
       const jsonMatch = text.match(/\{[\s\S]*\}$/);
       if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
+        const parsed = JSON.parse(jsonMatch[0]);
+        console.log('✅ [Step 1] Profile analysis parsed successfully');
+        return parsed;
       }
       return JSON.parse(text);
     } catch (e) {
-      console.error('Failed to parse profile analysis:', e);
+      console.error('❌ [Step 1] Failed to parse profile analysis:', e);
       return {
         businessIdentity: { name: inputData.fullName, tagline: '', description: inputData.biography },
         classification: { primaryCategory: inputData.category || '', subCategories: [], businessModel: '', industryTags: [] },

@@ -18,13 +18,31 @@ export interface IntegrationResult {
   error: string | null
 }
 
+// Singleton instances to prevent duplicate pushes
+let googleSheetsInstance: GoogleSheetsIntegration | null = null
+let hubspotInstance: HubSpotIntegration | null = null
+let bigqueryInstance: BigQueryIntegration | null = null
+let mailchimpInstance: MailchimpIntegration | null = null
+let salesforceInstance: SalesforceIntegration | null = null
+
 export class IntegrationManager {
-  private integrations: Record<IntegrationTarget, any> = {
-    google_sheets: new GoogleSheetsIntegration(),
-    hubspot: new HubSpotIntegration(),
-    bigquery: new BigQueryIntegration(),
-    mailchimp: new MailchimpIntegration(),
-    salesforce: new SalesforceIntegration(),
+  private integrations: Record<IntegrationTarget, any>
+
+  constructor() {
+    // Use singleton instances to prevent creating new ones on each request
+    if (!googleSheetsInstance) googleSheetsInstance = new GoogleSheetsIntegration()
+    if (!hubspotInstance) hubspotInstance = new HubSpotIntegration()
+    if (!bigqueryInstance) bigqueryInstance = new BigQueryIntegration()
+    if (!mailchimpInstance) mailchimpInstance = new MailchimpIntegration()
+    if (!salesforceInstance) salesforceInstance = new SalesforceIntegration()
+
+    this.integrations = {
+      google_sheets: googleSheetsInstance,
+      hubspot: hubspotInstance,
+      bigquery: bigqueryInstance,
+      mailchimp: mailchimpInstance,
+      salesforce: salesforceInstance,
+    }
   }
 
   async pushToIntegrations(
