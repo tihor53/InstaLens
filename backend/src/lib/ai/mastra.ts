@@ -8,7 +8,6 @@
  */
 
 import { getMastra, initializeMastra } from '../../../../frontend/instalensagent/src/mastra/index'
-import { instagramAnalysisWorkflow } from '../../../../frontend/instalensagent/src/mastra/workflows/instagram-analysis-workflow'
 
 /**
  * Export initializer and getter functions
@@ -17,29 +16,9 @@ export const setupMastra = initializeMastra
 export const getMastraInstance = getMastra
 
 /**
- * Helper to safely access the workflow
- * Directly imports the workflow instead of accessing through Mastra instance
+ * Note: The workflow was replaced with agent-based orchestration for more control.
+ * Use the individual agents (profileAnalyzerAgent, contentAnalyzerAgent, etc.)
+ * from the Mastra instance instead.
  */
-export async function getInstagramAnalysisWorkflow() {
-  // Ensure Mastra is initialized
-  try {
-    const mastra = getMastra()
-    if (!mastra) {
-      throw new Error('Mastra instance is null or undefined')
-    }
-    console.log('🔍 Mastra instance type:', typeof mastra)
-    console.log('🔍 Mastra instance keys:', Object.keys(mastra).join(', '))
-  } catch (e) {
-    console.warn('⚠️ Could not access Mastra instance:', e)
-  }
-
-  // Return the workflow directly from import
-  // This bypasses any issues with Mastra instance property access
-  if (!instagramAnalysisWorkflow) {
-    throw new Error('Instagram analysis workflow import failed')
-  }
-
-  return instagramAnalysisWorkflow
-}
 
 export default getMastra

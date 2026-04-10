@@ -1,6 +1,5 @@
 export { GoogleSheetsIntegration } from './google-sheets'
-export { HubSpotIntegration } from './hubspot'
-export { BigQueryIntegration } from './bigquery'
-export { MailchimpIntegration } from './mailchimp'
-export { SalesforceIntegration } from './salesforce'
+// export { BigQueryIntegration } from './bigquery'  // Not currently used
+// export { MailchimpIntegration } from './mailchimp'  // Not currently used
+// export { SalesforceIntegration } from './salesforce'  // Not currently used
 export { IntegrationManager, type IntegrationTarget, type IntegrationResult } from './manager'

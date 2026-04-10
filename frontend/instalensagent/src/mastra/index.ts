@@ -4,7 +4,6 @@ import { LibSQLStore } from '@mastra/libsql'
 import { DuckDBStore } from '@mastra/duckdb'
 import { MastraCompositeStore } from '@mastra/core/storage'
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability'
-import { instagramAnalysisWorkflow } from './workflows/instagram-analysis-workflow'
 import { profileAnalyzerAgent } from './agents/profile-analyzer-agent'
 import { contentAnalyzerAgent } from './agents/content-analyzer-agent'
 import { audienceAnalyzerAgent } from './agents/audience-analyzer-agent'
@@ -26,7 +25,6 @@ export async function initializeMastra(): Promise<Mastra> {
   const observabilityStore = await new DuckDBStore().getStore('observability')
 
   mastraInstance = new Mastra({
-    workflows: { instagramAnalysisWorkflow },
     agents: {
       profileAnalyzerAgent,
       contentAnalyzerAgent,
@@ -77,5 +75,4 @@ export function getMastra(): Mastra {
   return mastraInstance
 }
 
-export { instagramAnalysisWorkflow }
 export default getMastra

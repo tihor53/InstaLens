@@ -74,7 +74,7 @@ export const instagramProfileTool = createTool({
     topMentions: z.array(z.object({ mention: z.string(), count: z.number() })),
     contentThemes: z.string(),
   }),
-  execute: async (inputData) => {
+  execute: async (inputData, context) => {
     return await analyzeInstagramProfile(inputData.username);
   },
 });
@@ -130,7 +130,7 @@ const analyzeInstagramProfile = async (username: string) => {
         verified: analysisData.profile.verified,
       },
       totalPosts: analysisData.extracted.engagement.totalPosts,
-      totalEngagement: analysisData.extracted.engagement.totalEngagement,
+      engaging: analysisData.extracted.engagement.totalEngagement,
       averageLikesPerPost: analysisData.extracted.engagement.avgLikes,
       averageCommentsPerPost: analysisData.extracted.engagement.avgComments,
       topHashtags,

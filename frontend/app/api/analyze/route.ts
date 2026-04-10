@@ -72,8 +72,25 @@ export async function POST(request: NextRequest) {
       console.log('📋 [/api/analyze] Initializing MastraOrchestrator with Groq Llama 3.3 70B...')
       const orchestrator = new MastraOrchestrator()
       
+      // Normalize profile data with defaults for optional fields
+      const normalizedProfileData = {
+        ...body.profileData,
+        website: body.profileData.website || '',
+        category: body.profileData.category || 'uncategorized',
+        posts: (body.profileData.posts || []).map((post: any) => ({
+          caption: post.caption || '',
+          hashtags: post.hashtags || [],
+          mentions: post.mentions || [],
+          imageUrl: post.imageUrl || '', // Default to empty string if missing
+          likes: post.likes || 0,
+          comments: post.comments || 0,
+          timestamp: post.timestamp ? new Date(post.timestamp) : new Date(), // Convert to Date or use current time
+        })),
+        contactInfo: body.profileData.contactInfo || { email: undefined, phone: undefined, address: undefined },
+      }
+      
       console.log('🚀 [/api/analyze] Calling orchestrator.analyzeProfile() to execute Mastra workflow...')
-      const analysis = await orchestrator.analyzeProfile(body.profileData)
+      const analysis = await orchestrator.analyzeProfile(normalizedProfileData)
       
       console.log(`✅ [/api/analyze] Analysis complete for @${body.profileData.username}`)
       console.log('📋 [/api/analyze] Analysis structure:', {

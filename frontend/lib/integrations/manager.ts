@@ -1,5 +1,4 @@
 import { GoogleSheetsIntegration } from './google-sheets'
-import { HubSpotIntegration } from './hubspot'
 import { BigQueryIntegration } from './bigquery'
 import { MailchimpIntegration } from './mailchimp'
 import { SalesforceIntegration } from './salesforce'
@@ -7,7 +6,6 @@ import { SalesforceIntegration } from './salesforce'
 export type IntegrationTarget =
   | 'google_sheets'
   | 'bigquery'
-  | 'hubspot'
   | 'mailchimp'
   | 'salesforce'
 
@@ -20,7 +18,6 @@ export interface IntegrationResult {
 
 // Singleton instances to prevent duplicate pushes
 let googleSheetsInstance: GoogleSheetsIntegration | null = null
-let hubspotInstance: HubSpotIntegration | null = null
 let bigqueryInstance: BigQueryIntegration | null = null
 let mailchimpInstance: MailchimpIntegration | null = null
 let salesforceInstance: SalesforceIntegration | null = null
@@ -31,14 +28,12 @@ export class IntegrationManager {
   constructor() {
     // Use singleton instances to prevent creating new ones on each request
     if (!googleSheetsInstance) googleSheetsInstance = new GoogleSheetsIntegration()
-    if (!hubspotInstance) hubspotInstance = new HubSpotIntegration()
     if (!bigqueryInstance) bigqueryInstance = new BigQueryIntegration()
     if (!mailchimpInstance) mailchimpInstance = new MailchimpIntegration()
     if (!salesforceInstance) salesforceInstance = new SalesforceIntegration()
 
     this.integrations = {
       google_sheets: googleSheetsInstance,
-      hubspot: hubspotInstance,
       bigquery: bigqueryInstance,
       mailchimp: mailchimpInstance,
       salesforce: salesforceInstance,
@@ -128,11 +123,6 @@ export class IntegrationManager {
           config.datasetId &&
           process.env.GOOGLE_CLOUD_CREDENTIALS
         )
-      case 'hubspot':
-        return !!(
-          config.listId &&
-          process.env.HUBSPOT_ACCESS_TOKEN
-        )
       case 'mailchimp':
         return !!(config.listId && process.env.MAILCHIMP_API_KEY)
       case 'salesforce':
@@ -160,7 +150,6 @@ export class IntegrationManager {
 
     if (process.env.GOOGLE_CLOUD_CREDENTIALS) configured.push('google_sheets')
     if (process.env.GOOGLE_CLOUD_CREDENTIALS) configured.push('bigquery')
-    if (process.env.HUBSPOT_ACCESS_TOKEN) configured.push('hubspot')
     if (process.env.MAILCHIMP_API_KEY) configured.push('mailchimp')
     if (process.env.SALESFORCE_ACCESS_TOKEN) configured.push('salesforce')
 
